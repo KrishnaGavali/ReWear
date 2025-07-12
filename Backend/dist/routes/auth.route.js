@@ -7,4 +7,6 @@ const authRouter = (0, express_1.Router)();
 authRouter.post("/signup", auth_controller_1.signup);
 // Route for user login
 authRouter.post("/login", auth_controller_1.login);
+// Route for me
+authRouter.get("/me", auth_controller_1.getCurrentUser);
 exports.default = authRouter;

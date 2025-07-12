@@ -1,6 +1,5 @@
 import express, { Request, Response } from "express";
 import connectToDatabase from "./db";
-import userRouter from "./routes/user.route";
 import authRouter from "./routes/auth.route";
 
 const app = express();
@@ -13,7 +12,6 @@ connectToDatabase().then(() => {
   console.log("Database connection established");
 });
 
-app.use("/user", userRouter);
 app.use("/auth", authRouter);
 
 // Basic route

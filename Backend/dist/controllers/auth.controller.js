@@ -12,55 +12,84 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.login = exports.signup = void 0;
+exports.getCurrentUser = exports.login = exports.signup = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const user_model_1 = __importDefault(require("../models/user.model"));
+const authorize_1 = __importDefault(require("../middlewares/authorize"));
 // filepath: D:/rewear/Backend/src/controllers/auth.controller.ts
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret";
+const isValidEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+};
+const mongoose_1 = __importDefault(require("mongoose"));
 const signup = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { email, password, name } = req.body;
-        // Check if user already exists
-        const existingUser = yield user_model_1.default.findOne({ email });
-        if (existingUser) {
+        if (!email || !password || !name)
+            return res.status(400).json({ message: "All fields are required" });
+        if (!isValidEmail(email))
+            return res.status(400).json({ message: "Invalid email format" });
+        if (yield user_model_1.default.exists({ email }))
             return res.status(400).json({ message: "User already exists" });
-        }
-        // Hash the password
         const hashedPassword = yield bcryptjs_1.default.hash(password, 10);
-        // Create a new user
-        const newUser = new user_model_1.default({
-            email,
-            password: hashedPassword,
-            name,
-        });
-        yield newUser.save();
-        res.status(201).json({ message: "User created successfully" });
+        yield user_model_1.default.create({ email, password: hashedPassword, name });
+        return res.status(201).json({ message: "User created successfully" });
     }
     catch (error) {
-        res.status(500).json({ message: "Internal server error", error });
+        console.error("[signup]", error);
+        if (error instanceof mongoose_1.default.Error.ValidationError)
+            return res.status(400).json({ message: error.message });
+        return res
+            .status(500)
+            .json({ message: "Internal server error", error: error.message });
     }
 });
 exports.signup = signup;
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { email, password } = req.body;
-        // Check if user exists
-        const user = yield user_model_1.default.findOne({ email });
-        if (!user) {
+        if (!email || !password)
+            return res.status(400).json({ message: "All fields are required" });
+        if (!isValidEmail(email))
+            return res.status(400).json({ message: "Invalid email format" });
+        const user = yield user_model_1.default.findOne({ email }).select("+password");
+        if (!user)
             return res.status(404).json({ message: "User not found" });
-        }
-        // Compare passwords
-        const isPasswordValid = bcryptjs_1.default.compare(password, user.password);
-        if (!isPasswordValid) {
+        if (!(yield bcryptjs_1.default.compare(password, user.password)))
             return res.status(401).json({ message: "Invalid credentials" });
-        }
-        // Generate JWT token
-        const token = jsonwebtoken_1.default.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "1h" });
-        res.status(200).json({ message: "Login successful", token });
+        const token = jsonwebtoken_1.default.sign({ id: user._id, email: user.email }, JWT_SECRET, {
+            expiresIn: "1h",
+        });
+        return res.status(200).json({ message: "Login successful", token });
     }
     catch (error) {
-        res.status(500).json({ message: "Internal server error", error });
+        console.error("[login]", error);
+        return res
+            .status(500)
+            .json({ message: "Internal server error", error: error.message });
     }
 });
 exports.login = login;
+exports.getCurrentUser = [
+    authorize_1.default,
+    (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+        try {
+            if (!req.user) {
+                return res.status(401).json({ message: "Unauthorized" });
+            }
+            const user = yield user_model_1.default.findById(req.user.id).select("-password");
+            if (!user) {
+                return res.status(404).json({ message: "User not found" });
+            }
+            return res.status(200).json({ user });
+        }
+        catch (error) {
+            console.error("[getCurrentUser]", error);
+            return res
+                .status(500)
+                .json({ message: "Internal server error", error: error.message });
+        }
+    }),
+];
